@@ -66,7 +66,7 @@ public class PengelolaanKontakFrame extends javax.swing.JFrame {
     }
 }
     private void editContact() {
-    int selectedRow = tblKontak.getSelectedRow();
+    int selectedRow = tblKontakk.getSelectedRow();
     if (selectedRow == -1) {
         JOptionPane.showMessageDialog(this, "Pilih kontak yang ingin diperbarui.",
                 "Kesalahan", JOptionPane.WARNING_MESSAGE);
@@ -109,7 +109,7 @@ private void populateInputFields(int selectedRow) {
 }
 
 private void deleteContact() {
-    int selectedRow = tblKontak.getSelectedRow();
+    int selectedRow = tblKontakk.getSelectedRow();
     if (selectedRow != -1) {
         int id = (int) model.getValueAt(selectedRow, 0);
         try {
@@ -149,6 +149,154 @@ private void searchContact() {
     }
 }
 
+
+
+// ... (pastikan import di atas sudah ada di file Anda)
+
+private void exportToCSV() {
+    JFileChooser fileChooser = new JFileChooser();
+    fileChooser.setDialogTitle("Simpan File CSV");
+    int userSelection = fileChooser.showSaveDialog(this);
+
+    if (userSelection == JFileChooser.APPROVE_OPTION) {
+        File fileToSave = fileChooser.getSelectedFile();
+        // Tambahkan ekstensi .csv jika pengguna tidak menambahkannya
+        if (!fileToSave.getAbsolutePath().endsWith(".csv")) {
+            fileToSave = new File(fileToSave.getAbsolutePath() + ".csv");
+        }
+
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(fileToSave))) {
+            writer.write("ID,Nama,Nomor Telepon,Kategori\n"); // Header CSV
+            for (int i = 0; i < model.getRowCount(); i++) {
+                writer.write(
+                        model.getValueAt(i, 0) + "," +
+                        model.getValueAt(i, 1) + "," +
+                        model.getValueAt(i, 2) + "," +
+                        model.getValueAt(i, 3) + "\n"
+                );
+            }
+            // String yang terpotong digabungkan
+            JOptionPane.showMessageDialog(this, "Data berhasil diekspor ke " + fileToSave.getAbsolutePath());
+        } catch (IOException ex) {
+            showError("Gagal menulis file: " + ex.getMessage());
+        }
+    }
+}
+
+private void importFromCSV() {
+    showCSVGuide();
+    int confirm = JOptionPane.showConfirmDialog(
+            this,
+            // String yang terpotong digabungkan
+            "Apakah Anda yakin file CSV yang dipilih sudah sesuai dengan format?",
+            "Konfirmasi Impor CSV",
+            JOptionPane.YES_NO_OPTION
+    );
+
+    if (confirm == JOptionPane.YES_OPTION) {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Pilih File CSV");
+        int userSelection = fileChooser.showOpenDialog(this);
+
+        if (userSelection == JFileChooser.APPROVE_OPTION) {
+            File fileToOpen = fileChooser.getSelectedFile();
+            try (BufferedReader reader = new BufferedReader(new FileReader(fileToOpen))) {
+
+                String line = reader.readLine(); // Baca header
+                if (!validateCSVHeader(line)) {
+                    // String yang terpotong digabungkan
+                    JOptionPane.showMessageDialog(this, "Format header CSV tidak valid. " +
+                            "Pastikan header adalah: ID,Nama,Nomor Telepon,Kategori",
+                            "Kesalahan CSV", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+                int rowCount = 0;
+                int errorCount = 0;
+                int duplicateCount = 0;
+                // String yang terpotong digabungkan
+                StringBuilder errorLog = new StringBuilder("Baris dengan kesalahan:\n");
+
+                while ((line = reader.readLine()) != null) {
+                    rowCount++;
+                    String[] data = line.split(",");
+
+                    if (data.length != 4) {
+                        errorCount++;
+                        // String yang terpotong digabungkan
+                        errorLog.append("Baris ").append(rowCount + 1).append(": Format kolom tidak sesuai.\n");
+                        continue;
+                    }
+                    String nama = data[1].trim();
+                    String nomorTelepon = data[2].trim();
+                    String kategori = data[3].trim();
+                    if (nama.isEmpty() || nomorTelepon.isEmpty()) {
+                        errorCount++;
+                        // String yang terpotong digabungkan
+                        errorLog.append("Baris ").append(rowCount + 1).append(": Nama atau Nomor Telepon kosong.\n");
+                        continue;
+                    }
+                    if (!validatePhoneNumber(nomorTelepon)) {
+                        errorCount++;
+                        // String yang terpotong digabungkan
+                        errorLog.append("Baris ").append(rowCount + 1).append(": Nomor Telepon tidak valid.\n");
+                        continue;
+                    }
+                    try {
+                        if (controller.isDuplicatePhoneNumber(nomorTelepon, null)) {
+                            duplicateCount++;
+                            // String yang terpotong digabungkan
+                            errorLog.append("Baris ").append(rowCount + 1).append(": Kontak sudah ada.\n");
+                            continue;
+                        }
+                    } catch (SQLException ex) {
+                        Logger.getLogger(PengelolaanKontakFrame.class.getName()).log(Level.SEVERE, null, ex);
+                    }
+                    try {
+                        controller.addContact(nama, nomorTelepon, kategori);
+                    } catch (SQLException ex) {
+                        errorCount++;
+                        // String yang terpotong digabungkan
+                        errorLog.append("Baris ").append(rowCount + 1).append(": Gagal menyimpan ke database - ")
+                                .append(ex.getMessage()).append("\n");
+                    }
+                }
+                loadContacts();
+                if (errorCount > 0 || duplicateCount > 0) {
+                    // String yang terpotong digabungkan
+                    errorLog.append("\nTotal baris dengan kesalahan: ").append(errorCount).append("\n");
+                    errorLog.append("Total baris duplikat: ").append(duplicateCount).append("\n");
+                    JOptionPane.showMessageDialog(this,
+                            errorLog.toString(), "Kesalahan Impor", JOptionPane.WARNING_MESSAGE);
+                } else {
+                    // String yang terpotong digabungkan
+                    JOptionPane.showMessageDialog(this, "Semua data berhasil diimpor.");
+                }
+            } catch (IOException ex) {
+                showError("Gagal membaca file: " + ex.getMessage());
+            }
+        }
+    }
+}
+
+private void showCSVGuide() {
+    // String yang panjang harus digabung dengan tanda +
+    String guideMessage = "Format CSV untuk impor data:\n" +
+            "- Header wajib: ID, Nama, Nomor Telepon, Kategori\n" +
+            "- ID dapat kosong (akan diisi otomatis)\n" +
+            "- Nama dan Nomor Telepon wajib diisi\n" +
+            "- Contoh isi file CSV:\n" +
+            " 1, Andi, 08123456789, Teman\n" +
+            " 2, Budi Doremi, 08567890123, Keluarga\n\n" +
+            "Pastikan file CSV sesuai format sebelum melakukan impor.";
+    JOptionPane.showMessageDialog(this, guideMessage, "Panduan Format CSV",
+            JOptionPane.INFORMATION_MESSAGE);
+}
+
+private boolean validateCSVHeader(String header) {
+    return header != null &&
+            header.trim().equalsIgnoreCase("ID,Nama,Nomor Telepon,Kategori");
+}
+
 private boolean validatePhoneNumber(String phoneNumber) {
     if (phoneNumber == null || phoneNumber.isEmpty()) {
         JOptionPane.showMessageDialog(this, "Nomor telepon tidak boleh kosong.");
@@ -186,7 +334,8 @@ private void showError(String message) {
 
         {"No", "Nama", "Nomor Telepon", "Kategori"}, 0);
 
-        tblKontak.setModel(model);
+        tblKontakk.setModel(model);
+
         loadContacts();
 
     }
@@ -211,13 +360,13 @@ private void showError(String message) {
         txtNomorTelepon = new javax.swing.JTextField();
         txtPencarian = new javax.swing.JTextField();
         cmbKategori = new javax.swing.JComboBox<>();
-        jScrollPane1 = new javax.swing.JScrollPane();
-        tblKontak = new javax.swing.JTable();
         btnTambah = new javax.swing.JButton();
         btnEdit = new javax.swing.JButton();
         btnHapus = new javax.swing.JButton();
         btnExport = new javax.swing.JButton();
         btnImport = new javax.swing.JButton();
+        tblKontak = new javax.swing.JScrollPane();
+        tblKontakk = new javax.swing.JTable();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
         setTitle("Pengelolaan Kontak");
@@ -247,24 +396,6 @@ private void showError(String message) {
         });
 
         cmbKategori.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Keluarga", "Teman", "Kantor", " " }));
-
-        tblKontak.setModel(new javax.swing.table.DefaultTableModel(
-            new Object [][] {
-                {null, null, null, null},
-                {null, null, null, null},
-                {null, null, null, null},
-                {null, null, null, null}
-            },
-            new String [] {
-                "Title 1", "Title 2", "Title 3", "Title 4"
-            }
-        ));
-        tblKontak.addMouseListener(new java.awt.event.MouseAdapter() {
-            public void mouseClicked(java.awt.event.MouseEvent evt) {
-                tblKontakMouseClicked(evt);
-            }
-        });
-        jScrollPane1.setViewportView(tblKontak);
 
         btnTambah.setText("Tambah");
         btnTambah.addActionListener(new java.awt.event.ActionListener() {
@@ -301,17 +432,47 @@ private void showError(String message) {
             }
         });
 
+        tblKontak.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                tblKontakMouseClicked(evt);
+            }
+        });
+
+        tblKontakk.setModel(new javax.swing.table.DefaultTableModel(
+            new Object [][] {
+                {null, null, null, null},
+                {null, null, null, null},
+                {null, null, null, null},
+                {null, null, null, null}
+            },
+            new String [] {
+                "Title 1", "Title 2", "Title 3", "Title 4"
+            }
+        ));
+        tblKontakk.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                tblKontakkMouseClicked(evt);
+            }
+        });
+        tblKontak.setViewportView(tblKontakk);
+
         javax.swing.GroupLayout jPanel2Layout = new javax.swing.GroupLayout(jPanel2);
         jPanel2.setLayout(jPanel2Layout);
         jPanel2Layout.setHorizontalGroup(
             jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel2Layout.createSequentialGroup()
+                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                .addComponent(btnExport)
+                .addGap(18, 18, 18)
+                .addComponent(btnImport)
+                .addGap(55, 55, 55))
             .addGroup(jPanel2Layout.createSequentialGroup()
                 .addGap(30, 30, 30)
                 .addGroup(jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                     .addComponent(jLabel3, javax.swing.GroupLayout.PREFERRED_SIZE, 112, javax.swing.GroupLayout.PREFERRED_SIZE)
                     .addComponent(jLabel2, javax.swing.GroupLayout.PREFERRED_SIZE, 112, javax.swing.GroupLayout.PREFERRED_SIZE)
                     .addGroup(jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING)
-                        .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, 466, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addComponent(tblKontak, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
                         .addGroup(jPanel2Layout.createSequentialGroup()
                             .addGroup(jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                                 .addComponent(jLabel1, javax.swing.GroupLayout.PREFERRED_SIZE, 112, javax.swing.GroupLayout.PREFERRED_SIZE)
@@ -328,13 +489,7 @@ private void showError(String message) {
                                     .addGap(18, 18, 18)
                                     .addComponent(btnHapus, javax.swing.GroupLayout.PREFERRED_SIZE, 87, javax.swing.GroupLayout.PREFERRED_SIZE))
                                 .addComponent(txtPencarian)))))
-                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
-            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel2Layout.createSequentialGroup()
-                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                .addComponent(btnExport)
-                .addGap(18, 18, 18)
-                .addComponent(btnImport)
-                .addGap(55, 55, 55))
+                .addContainerGap(62, Short.MAX_VALUE))
         );
         jPanel2Layout.setVerticalGroup(
             jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -351,20 +506,18 @@ private void showError(String message) {
                 .addGroup(jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                     .addComponent(jLabel3)
                     .addComponent(cmbKategori, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
+                .addGap(12, 12, 12)
+                .addGroup(jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                    .addComponent(btnTambah)
+                    .addComponent(btnEdit)
+                    .addComponent(btnHapus))
+                .addGap(10, 10, 10)
+                .addGroup(jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                    .addComponent(jLabel4)
+                    .addComponent(txtPencarian, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
                 .addGap(18, 18, 18)
-                .addGroup(jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addGroup(jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                        .addComponent(btnTambah)
-                        .addComponent(btnEdit)
-                        .addComponent(btnHapus))
-                    .addGroup(jPanel2Layout.createSequentialGroup()
-                        .addGap(49, 49, 49)
-                        .addGroup(jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                            .addComponent(jLabel4)
-                            .addComponent(txtPencarian, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))))
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, 23, Short.MAX_VALUE)
-                .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addGap(18, 18, 18)
+                .addComponent(tblKontak, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, 41, Short.MAX_VALUE)
                 .addGroup(jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(btnExport)
                     .addComponent(btnImport))
@@ -393,24 +546,30 @@ private void showError(String message) {
 
     private void btnExportActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnExportActionPerformed
         // TODO add your handling code here:
+        exportToCSV();
     }//GEN-LAST:event_btnExportActionPerformed
 
     private void btnImportActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnImportActionPerformed
         // TODO add your handling code here:
+        importFromCSV();
     }//GEN-LAST:event_btnImportActionPerformed
-
-    private void tblKontakMouseClicked(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_tblKontakMouseClicked
-        // TODO add your handling code here:
-        int selectedRow = tblKontak.getSelectedRow();
-if (selectedRow != -1) {
-populateInputFields(selectedRow);
-}
-    }//GEN-LAST:event_tblKontakMouseClicked
 
     private void txtPencarianKeyTyped(java.awt.event.KeyEvent evt) {//GEN-FIRST:event_txtPencarianKeyTyped
         // TODO add your handling code here:
         searchContact();
     }//GEN-LAST:event_txtPencarianKeyTyped
+
+    private void tblKontakMouseClicked(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_tblKontakMouseClicked
+        // TODO add your handling code here:
+    }//GEN-LAST:event_tblKontakMouseClicked
+
+    private void tblKontakkMouseClicked(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_tblKontakkMouseClicked
+        // TODO add your handling code here}
+       int selectedRow = tblKontakk.getSelectedRow();
+        if (selectedRow != -1) {
+         populateInputFields(selectedRow);
+}
+    }//GEN-LAST:event_tblKontakkMouseClicked
 
     /**
      * @param args the command line arguments
@@ -460,9 +619,9 @@ populateInputFields(selectedRow);
     private javax.swing.JLabel jLabel4;
     private javax.swing.JPanel jPanel1;
     private javax.swing.JPanel jPanel2;
-    private javax.swing.JScrollPane jScrollPane1;
     private javax.swing.JLabel lblJudul;
-    private javax.swing.JTable tblKontak;
+    private javax.swing.JScrollPane tblKontak;
+    private javax.swing.JTable tblKontakk;
     private javax.swing.JTextField txtNama;
     private javax.swing.JTextField txtNomorTelepon;
     private javax.swing.JTextField txtPencarian;
