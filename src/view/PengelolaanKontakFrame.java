@@ -332,6 +332,9 @@ private void showError(String message) {
      */
     public PengelolaanKontakFrame() {
         initComponents();
+        
+        setLocationRelativeTo(null);
+        
         controller = new KontakController();
         model = new DefaultTableModel(new String[]
 
